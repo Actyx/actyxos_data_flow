@@ -1,0 +1,41 @@
+[package]
+name = "actyxos_data_flow"
+version = "0.1.0"
+authors = ["Actyx AG <developer@actyx.io>"]
+edition = "2018"
+description = "Tools for exporting live data from ActyxOS to external systems"
+readme = "README.md"
+documentation = "https://docs.rs/actyxos_data_flow"
+homepage = "https://developer.actyx.com"
+license = "Apache-2.0"
+keywords = ["distributed", "decentralized", "event-sourcing"]
+categories = ["network-programming"]
+
+[dependencies]
+abomonation = "0.7"
+abomonation_derive = "0.5"
+actyxos_sdk = { version = "0.3.1", features = ["client", "dataflow"] }
+anyhow = "1"
+chrono = "0.4"
+chrono-tz = "0.5"
+derive_more = "0.99"
+differential-dataflow = "0.11"
+futures = { version = "0.3", features = ["compat"] }
+futures-state-stream = "0.1"
+futures01 = { package = "futures", version = "0.1" }
+itertools = "0.9"
+native-tls = "0.2"
+postgres = { version = "0.17", features = ["with-chrono-0_4", "with-serde_json-1"] }
+postgres-native-tls = "0.3"
+rusqlite = { version = "0.22", features = ["bundled", "backup"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_cbor = "0.11"
+serde_json = { version = "1", features = ["raw_value"] }
+tiberius = { version = "0.3", features = ["chrono"] }
+timely = "0.11"
+tokio = { version = "0.2", features = ["rt-threaded", "macros", "time"] }
+tracing = { version = "0.1.15", path = "../tracing/tracing" }
+
+[dev-dependencies]
+test-env-log = { version = "0.2", features = ["trace"], default-features = false }
+tracing-subscriber = { version = "0.2.6", features = ["chrono", "env-filter", "fmt"], path = "../tracing/tracing-subscriber" }
