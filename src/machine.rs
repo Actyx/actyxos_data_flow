@@ -14,6 +14,19 @@ use actyxos_sdk::event::{Event, Payload};
 use serde::de::DeserializeOwned;
 use std::{marker::PhantomData, time::Duration};
 
+/// Encapsulation of a differential dataflow, managing inputs and outputs
+///
+/// The machine is parameterised with a function creating the business logic
+/// which is run within the scope of a thread-based worker; the machine is
+/// thus single-threaded.
+///
+/// The usage principle is that the inputs are used to feed data into the
+/// machine. From time to time [`drain_deltas`](#method.drain_deltas) needs
+/// to be called to flush inputs through the dataflow and extract the resulting
+/// deltas. To this end, the machine manages the dataflow’s logical time:
+/// each call to `drain_deltas` increments the time by one unit and then
+/// steps the dataflow worker until the new time is seen at the output
+/// [`Flow`](../flow/struct.Flow.html).
 pub struct Machine<In: Inputs, Out: ExchangeData, St: NeedsState> {
     inputs: In,
     output: Output<Out>,
@@ -95,6 +108,11 @@ impl<I, T1: Inputs<Elem = I>, T2: Inputs<Elem = I>, T3: Inputs<Elem = I>> Inputs
 }
 
 impl<In: Inputs, Out: ExchangeData, St: NeedsState> Machine<In, Out, St> {
+    /// Construct a new machine
+    ///
+    /// The given function receives a reference to a dataflow scope with limited
+    /// lifetime, it can therefore only return the flow and not store it in external
+    /// locations.
     pub fn new<F>(f: F) -> Self
     where
         F: for<'a> FnOnce(&mut Child<'a, Worker<Thread>, usize>) -> (In, Flow<'a, Out, St>),
@@ -114,18 +132,24 @@ impl<In: Inputs, Out: ExchangeData, St: NeedsState> Machine<In, Out, St> {
         }
     }
 
+    /// Returns true if the captured Flow uses at least one stateful operator
     pub fn needs_state(&self) -> bool {
         St::needs_state()
     }
 
+    /// Returns the minimum look-back duration in case all input collections are limited
+    ///
+    /// cf. [`Flow::new_limited`](../flow/struct.Flow.html#method.new_limited)
     pub fn look_back(&self) -> Option<Duration> {
         self.inputs.look_back()
     }
 
+    /// Get a reference to the inputs in order to feed them
     pub fn inputs(&mut self) -> &mut In {
         &mut self.inputs
     }
 
+    /// Process all inputs fed since the last call to this method and return the resulting deltas
     pub fn drain_deltas(&mut self) -> Coll<Out, isize> {
         self.time += 1;
         let now = self.time;

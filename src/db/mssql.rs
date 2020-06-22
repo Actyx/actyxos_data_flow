@@ -215,6 +215,13 @@ impl<T: DbRecordExt<MssqlDbMechanics> + 'static> DB for MssqlDB<T> {
     type Mechanics = MssqlDbMechanics;
     type Record = T;
 
+    fn name() -> &'static str {
+        "MSSQL(tiberius)"
+    }
+    fn get_mechanics(&self) -> &Self::Mechanics {
+        &self.mechanics
+    }
+
     #[instrument(skip(self), level = "trace")]
     fn get_offsets(&mut self) -> Result<OffsetMap> {
         let conn = self.connect().te()?;

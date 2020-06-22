@@ -163,6 +163,13 @@ impl<T: DbRecordExt<SqliteDbMechanics> + Debug + 'static> DB for SqliteDB<T> {
     type Mechanics = SqliteDbMechanics;
     type Record = T;
 
+    fn name() -> &'static str {
+        "Sqlite3(rusqlite)"
+    }
+    fn get_mechanics(&self) -> &Self::Mechanics {
+        &self.mechanics
+    }
+
     #[instrument(skip(self), level = "trace")]
     fn get_offsets(&mut self) -> Result<OffsetMap> {
         let mut borrow = self.conn.borrow_mut();

@@ -41,7 +41,7 @@ use abomonation_derive::Abomonation;
 use actyxos_sdk::event::OffsetMap;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt::Debug};
 
 mod mssql;
 mod postgre;
@@ -94,6 +94,18 @@ pub trait DB {
     type Mechanics: DbMechanics;
     /// type of record for which this database driver is responsible
     type Record: 'static + DbRecordExt<Self::Mechanics>;
+
+    /// a printable name for this database type
+    fn name() -> &'static str;
+    /// a debug representation of this DB instance
+    fn to_debug_string(&self) -> String {
+        format!(
+            "DB({}, {:?})",
+            Self::name(),
+            Self::Record::table_version(self.get_mechanics())
+        )
+    }
+    fn get_mechanics(&self) -> &Self::Mechanics;
 
     /// read the offset map up to which events have been included in the currently stored tables
     fn get_offsets(&mut self) -> Result<OffsetMap>;

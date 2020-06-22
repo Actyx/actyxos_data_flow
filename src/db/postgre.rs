@@ -159,6 +159,13 @@ impl<T: DbRecordExt<PostgresDbMechanics> + 'static> DB for PostgresDB<T> {
     type Mechanics = PostgresDbMechanics;
     type Record = T;
 
+    fn name() -> &'static str {
+        "PostgreSQL(postgres)"
+    }
+    fn get_mechanics(&self) -> &Self::Mechanics {
+        &self.mechanics
+    }
+
     #[instrument(skip(self), level = "trace")]
     fn get_offsets(&mut self) -> Result<OffsetMap> {
         let mut borrow = self.conn.borrow_mut();
