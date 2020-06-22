@@ -12,7 +12,7 @@ use std::{
     marker::PhantomData,
     str::FromStr,
 };
-use tracing::info;
+use tracing::{debug, field, info, instrument, trace_span};
 
 /// Database driver for PostgreSQL, based on the postgres crate
 pub struct PostgresDB<T> {
@@ -33,7 +33,13 @@ impl<T: DbRecordExt<PostgresDbMechanics> + 'static> PostgresDB<T> {
     pub fn new(prefix: impl Into<String>, db_name: &str) -> Result<Self> {
         let schema_versions_table_schema = "table_name text, version int not null".to_owned();
         let tls_mode = MakeTlsConnector::new(TlsConnector::new()?);
-        let conn = Client::connect(db_name, tls_mode)?;
+
+        let conn = trace_span!("connect").in_scope(|| -> Result<_> {
+            let ret = Client::connect(db_name, tls_mode)?;
+            debug!("new connection");
+            Ok(ret)
+        })?;
+
         let mut prefix = prefix.into();
         if !prefix.is_empty() {
             prefix.push('_');
@@ -67,7 +73,12 @@ impl<T: DbRecordExt<PostgresDbMechanics> + 'static> PostgresDB<T> {
             &res
         );
 
-        if res != T::table_version(&ret.mechanics) {
+        let expected_versions = T::table_version(&ret.mechanics);
+        if res != expected_versions {
+            info!(
+                "migrating schema from version {:?} to version {:?}",
+                res, expected_versions
+            );
             for query in T::update_current_table_version(&ret.mechanics)
                 .into_iter()
                 .chain(once(T::create_offsets(&ret.mechanics)))
@@ -79,12 +90,14 @@ impl<T: DbRecordExt<PostgresDbMechanics> + 'static> PostgresDB<T> {
         }
 
         tx.commit()?;
+        info!("initialization complete");
         drop(borrow);
 
         Ok(ret)
     }
 
     #[cfg(test)]
+    #[instrument(skip(self), level = "trace")]
     fn get_records<X: tests::ParseRow>(&mut self) -> Result<Vec<X>> {
         let mut borrow = self.conn.borrow_mut();
         let mut tx = borrow.transaction()?;
@@ -96,6 +109,7 @@ impl<T: DbRecordExt<PostgresDbMechanics> + 'static> PostgresDB<T> {
     }
 
     #[cfg(test)]
+    #[instrument(skip(self), level = "trace")]
     fn clear_database(&mut self) -> Result<()> {
         let mut borrow = self.conn.borrow_mut();
         let mut tx = borrow.transaction()?;
@@ -145,6 +159,7 @@ impl<T: DbRecordExt<PostgresDbMechanics> + 'static> DB for PostgresDB<T> {
     type Mechanics = PostgresDbMechanics;
     type Record = T;
 
+    #[instrument(skip(self), level = "trace")]
     fn get_offsets(&mut self) -> Result<OffsetMap> {
         let mut borrow = self.conn.borrow_mut();
         let mut tx = borrow.transaction()?;
@@ -165,6 +180,7 @@ impl<T: DbRecordExt<PostgresDbMechanics> + 'static> DB for PostgresDB<T> {
         Ok(result)
     }
 
+    #[instrument(skip(self, offsets, deltas), level = "trace")]
     fn advance_offsets<C>(&mut self, offsets: &OffsetMap, deltas: C) -> Result<()>
     where
         C: IntoIterator<Item = (T, isize)>,
@@ -172,10 +188,13 @@ impl<T: DbRecordExt<PostgresDbMechanics> + 'static> DB for PostgresDB<T> {
         let mut borrow = self.conn.borrow_mut();
         let mut tx = borrow.transaction()?;
 
-        let offset = tx.prepare(T::insert_offset(&self.mechanics).as_str())?;
-        for (s, o) in offsets.as_ref() {
-            tx.execute(&offset, &[&s.as_str(), &o.0])?;
-        }
+        trace_span!("writing offsets").in_scope(|| -> Result<_> {
+            let offset = tx.prepare(T::insert_offset(&self.mechanics).as_str())?;
+            for (s, o) in offsets.as_ref() {
+                tx.execute(&offset, &[&s.as_str(), &o.0])?;
+            }
+            Ok(())
+        })?;
 
         let insert: BTreeMap<&'static str, Statement> = T::insert_record(&self.mechanics)
             .into_iter()
@@ -186,7 +205,11 @@ impl<T: DbRecordExt<PostgresDbMechanics> + 'static> DB for PostgresDB<T> {
             .map(|stmt| (stmt.0, tx.prepare(stmt.1.as_str()).unwrap()))
             .collect();
 
+        let mut d = 0;
+        let span = trace_span!("writing records", deltas = field::Empty);
+        let guard = span.enter();
         for (record, mult) in deltas {
+            d += 1;
             let (table, values) = record.values();
             match mult.cmp(&0) {
                 Ordering::Greater => with_sql(values, |params| {
@@ -208,8 +231,12 @@ impl<T: DbRecordExt<PostgresDbMechanics> + 'static> DB for PostgresDB<T> {
                 Ordering::Equal => panic!("cannot insert with multiplicity {}", mult),
             };
         }
+        span.record("deltas", &d);
+        drop(guard);
+        drop(span);
 
         tx.commit()?;
+        debug!(deltas = d, events = offsets.size(), "done writing");
         Ok(())
     }
 }

@@ -117,7 +117,7 @@ impl<T: DbRecordExt<MssqlDbMechanics> + 'static> MssqlDB<T> {
         Ok(ret)
     }
 
-    #[instrument(skip(self), level = "debug")]
+    #[instrument(skip(self), level = "trace")]
     fn connect(&mut self) -> Result<Conn, tiberius::Error> {
         match self.conn.take() {
             Some(conn) => Ok(conn),
@@ -133,7 +133,7 @@ impl<T: DbRecordExt<MssqlDbMechanics> + 'static> MssqlDB<T> {
     }
 
     #[cfg(test)]
-    #[instrument(skip(self), level = "debug")]
+    #[instrument(skip(self), level = "trace")]
     fn get_records<X: tests::ParseRow>(&mut self) -> Result<Vec<X>> {
         let conn = self.connect().te()?;
         let tx = conn.transaction().wait().te()?;
@@ -151,7 +151,7 @@ impl<T: DbRecordExt<MssqlDbMechanics> + 'static> MssqlDB<T> {
     }
 
     #[cfg(test)]
-    #[instrument(skip(self), level = "debug")]
+    #[instrument(skip(self), level = "trace")]
     fn clear_database(&mut self) -> Result<()> {
         let conn = self.connect().te()?;
 
@@ -330,6 +330,7 @@ impl<T: DbRecordExt<MssqlDbMechanics> + 'static> DB for MssqlDB<T> {
         drop(span);
 
         let conn = tx.commit().wait().te()?;
+        debug!(deltas = d, events = offsets.size(), "done writing");
         self.conn = Some(conn);
         Ok(())
     }

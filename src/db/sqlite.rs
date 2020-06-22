@@ -6,10 +6,10 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::{cell::RefCell, fmt::Debug, iter::once, marker::PhantomData, str::FromStr};
+use tracing::{debug, field, info, instrument, trace_span};
 
 #[cfg(test)]
 use rusqlite::types::Value;
-use tracing::info;
 
 /// Database driver for Sqlite3, based on the rusqlite crate
 pub struct SqliteDB<T> {
@@ -24,18 +24,24 @@ impl<T: DbRecordExt<SqliteDbMechanics> + Debug + 'static> SqliteDB<T> {
         let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
             | OpenFlags::SQLITE_OPEN_CREATE
             | OpenFlags::SQLITE_OPEN_FULL_MUTEX;
-        let conn = Connection::open_with_flags(PathBuf::from(db_name), flags)?;
 
-        // `PRAGMA journal_mode = WAL;` https://www.sqlite.org/wal.html
-        // This PRAGMA statement returns the new journal mode, so we need to see if it succeeded
-        conn.query_row("PRAGMA journal_mode = WAL;", NO_PARAMS, |row| {
-            match row.get_raw(0).as_str().unwrap() {
-                "wal" | "memory" => Ok(()),
-                _ => Err(rusqlite::Error::InvalidQuery),
-            }
+        let conn = trace_span!("connect").in_scope(|| -> Result<_> {
+            let conn = Connection::open_with_flags(PathBuf::from(db_name), flags)?;
+
+            // `PRAGMA journal_mode = WAL;` https://www.sqlite.org/wal.html
+            // This PRAGMA statement returns the new journal mode, so we need to see if it succeeded
+            conn.query_row("PRAGMA journal_mode = WAL;", NO_PARAMS, |row| {
+                match row.get_raw(0).as_str().unwrap() {
+                    "wal" | "memory" => Ok(()),
+                    _ => Err(rusqlite::Error::InvalidQuery),
+                }
+            })?;
+            // `PRAGMA synchronous = NORMAL;` https://www.sqlite.org/pragma.html#pragma_synchronous
+            conn.execute("PRAGMA synchronous = NORMAL;", NO_PARAMS)?;
+
+            debug!("new connection");
+            Ok(conn)
         })?;
-        // `PRAGMA synchronous = NORMAL;` https://www.sqlite.org/pragma.html#pragma_synchronous
-        conn.execute("PRAGMA synchronous = NORMAL;", NO_PARAMS)?;
 
         conn.execute_batch(
             format!(
@@ -79,7 +85,12 @@ impl<T: DbRecordExt<SqliteDbMechanics> + Debug + 'static> SqliteDB<T> {
             &res
         );
 
-        if res != T::table_version(&ret.mechanics) {
+        let expected_versions = T::table_version(&ret.mechanics);
+        if res != expected_versions {
+            info!(
+                "migrating schema from version {:?} to version {:?}",
+                res, expected_versions
+            );
             for query in T::update_current_table_version(&ret.mechanics)
                 .into_iter()
                 .chain(once(T::create_offsets(&ret.mechanics)))
@@ -89,14 +100,16 @@ impl<T: DbRecordExt<SqliteDbMechanics> + Debug + 'static> SqliteDB<T> {
                 tx.execute(&query, NO_PARAMS)?;
             }
         }
-        tx.commit()?;
 
+        tx.commit()?;
+        info!("initialization complete");
         drop(borrow);
 
         Ok(ret)
     }
 
     #[cfg(test)]
+    #[instrument(skip(self), level = "trace")]
     fn get_records(&mut self) -> Result<Vec<Vec<Value>>> {
         let mut borrow = self.conn.borrow_mut();
         let tx = borrow.transaction()?;
@@ -150,6 +163,7 @@ impl<T: DbRecordExt<SqliteDbMechanics> + Debug + 'static> DB for SqliteDB<T> {
     type Mechanics = SqliteDbMechanics;
     type Record = T;
 
+    #[instrument(skip(self), level = "trace")]
     fn get_offsets(&mut self) -> Result<OffsetMap> {
         let mut borrow = self.conn.borrow_mut();
         let tx = borrow.transaction()?;
@@ -171,6 +185,7 @@ impl<T: DbRecordExt<SqliteDbMechanics> + Debug + 'static> DB for SqliteDB<T> {
         Ok(result)
     }
 
+    #[instrument(skip(self, offsets, deltas), level = "trace")]
     fn advance_offsets<C>(&mut self, offsets: &OffsetMap, deltas: C) -> Result<()>
     where
         C: IntoIterator<Item = (T, isize)>,
@@ -178,11 +193,13 @@ impl<T: DbRecordExt<SqliteDbMechanics> + Debug + 'static> DB for SqliteDB<T> {
         let mut borrow = self.conn.borrow_mut();
         let tx = borrow.transaction()?;
 
-        let mut offset = tx.prepare(T::insert_offset(&self.mechanics).as_str())?;
-        for (s, o) in offsets.as_ref() {
-            offset.execute(params![s.as_str(), o.0])?;
-        }
-        drop(offset);
+        trace_span!("writing offsets").in_scope(|| -> Result<_> {
+            let mut offset = tx.prepare(T::insert_offset(&self.mechanics).as_str())?;
+            for (s, o) in offsets.as_ref() {
+                offset.execute(params![s.as_str(), o.0])?;
+            }
+            Ok(())
+        })?;
 
         let mut insert: BTreeMap<&'static str, Statement> = T::insert_record(&self.mechanics)
             .into_iter()
@@ -193,7 +210,11 @@ impl<T: DbRecordExt<SqliteDbMechanics> + Debug + 'static> DB for SqliteDB<T> {
             .map(|stmt| (stmt.0, tx.prepare(&stmt.1).unwrap()))
             .collect();
 
+        let mut d = 0;
+        let span = trace_span!("writing records", deltas = field::Empty);
+        let guard = span.enter();
         for (record, mult) in deltas {
+            d += 1;
             match mult.cmp(&0) {
                 Ordering::Greater => {
                     for _ in 0..mult {
@@ -214,11 +235,14 @@ impl<T: DbRecordExt<SqliteDbMechanics> + Debug + 'static> DB for SqliteDB<T> {
                 Ordering::Equal => panic!("cannot insert with multiplicity {}", mult),
             };
         }
-
+        span.record("deltas", &d);
+        drop(guard);
+        drop(span);
         drop(insert);
         drop(delete);
 
         tx.commit()?;
+        debug!(deltas = d, events = offsets.size(), "done writing");
         Ok(())
     }
 }
