@@ -1,0 +1,9 @@
+manifestVersion: "1.0"
+type: web
+id: com.actyx.data-flow-sample-ui
+version: 1.0.0
+displayName: data-flow sample app
+description: Sample Webview App to demonstrate the actyxos_data_flow
+dist: build/release/
+main: build/release/index.html
+settingsSchema: {"default":{}}
