@@ -34,8 +34,8 @@ serde_json = { version = "1", features = ["raw_value"] }
 tiberius = { version = "0.3", features = ["chrono"] }
 timely = "0.11"
 tokio = { version = "0.2", features = ["rt-threaded", "macros", "time"] }
-tracing = { version = "0.1.15", path = "../tracing/tracing" }
+tracing = { version = "0.1.15" }
 
 [dev-dependencies]
 test-env-log = { version = "0.2", features = ["trace"], default-features = false }
-tracing-subscriber = { version = "0.2.6", features = ["chrono", "env-filter", "fmt"], path = "../tracing/tracing-subscriber" }
+tracing-subscriber = { version = "0.2.6", features = ["chrono", "env-filter", "fmt"] }

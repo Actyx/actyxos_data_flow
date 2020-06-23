@@ -6,7 +6,8 @@ use actyxos_data_flow::{
 use actyxos_sdk::{event_service::Subscription, semantics};
 use anyhow::Result;
 use logic::dashboard_logic;
-use tracing_subscriber::{EnvFilter, FmtSubscriber};
+use tracing::Level;
+use tracing_subscriber::FmtSubscriber;
 
 mod logic;
 mod model;
@@ -25,7 +26,7 @@ fn main() -> Result<()> {
 
     // set up logging
     let subscriber = FmtSubscriber::builder()
-        .with_env_filter(EnvFilter::from_default_env())
+        .with_max_level(Level::DEBUG)
         .finish();
     tracing::subscriber::set_global_default(subscriber)?;
 
