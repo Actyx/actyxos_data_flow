@@ -537,6 +537,20 @@ where
         self.reduce(|_, i, o| o.push((i[i.len() - 1].0.clone(), 1)))
     }
 
+    /// Compute the maximum element per key
+    pub fn max_by<T, F>(&self, f: F) -> Self
+    where
+        F: Fn(&V) -> T + 'static + Clone,
+        T: Ord,
+    {
+        self.reduce(move |_, i, o| {
+            o.push((
+                i.iter().map(|x| x.0.clone()).max_by_key(f.clone()).unwrap(),
+                1,
+            ))
+        })
+    }
+
     /// Ungroup by discarding the key
     pub fn ungroup(&self) -> Flow<'a, V, Stateful> {
         self.ungroup_with(|_, v| v.clone())

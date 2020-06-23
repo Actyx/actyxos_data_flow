@@ -36,10 +36,10 @@ use tracing::{debug, debug_span, error, field, info, info_span, warn};
 /// DB/logic pairs. The differential dataflow created by the [`Machine`](../machine/struct.Machine.html)
 /// uses a single-threaded worker, so the runtime’s threads will only be used to run tasks
 /// for HTTP communication with the ActyxOS Event Service.
-pub fn run_with_db_channel<D, M, Fut, Out, F>(
+pub fn run_with_db_channel<D, M, Fut, Out, F, N>(
     runtime: Handle,
     db: &mut D,
-    name: String,
+    name: N,
     logic: F,
 ) -> Result<()>
 where
@@ -48,30 +48,30 @@ where
     F: FnOnce(OffsetMap, SyncSender<(OffsetMap, Vec<(Out, isize)>)>) -> Fut + Send + 'static,
     Fut: Future<Output = Result<()>>,
     Out: ExchangeData + DbRecordExt<M>,
+    N: Into<String>,
 {
-    let name = field::display(name);
-    info!(name, "starting DB {}", db.to_debug_string());
+    let name = field::display(name.into());
+    let span = info_span!("DB", name);
+    let _guard = span.enter();
+
+    info!("starting DB {}", db.to_debug_string());
     let offsets = db.get_offsets()?;
-    debug!(name, events = offsets.size(), "got offsets from DB");
+    debug!(events = offsets.size(), "got offsets from DB");
 
     // limit the machine to run at most two batches ahead of the database
     // (1 in the channel, 1 in hand)
     let (to_db, from_machine) = sync_channel(1);
 
-    std::thread::spawn({
-        let name = name.clone();
-        move || {
-            debug!(name, "starting machine thread");
-            // we cannot make the returned Future Send because differential dataflow does not allow that
-            runtime.block_on(logic(offsets, to_db)).unwrap();
-        }
+    std::thread::spawn(move || {
+        debug!(name, "starting machine thread");
+        // we cannot make the returned Future Send because differential dataflow does not allow that
+        runtime.block_on(logic(offsets, to_db)).unwrap();
     });
 
     loop {
         // will kill this loop if the sender went away
         let (offsets, out) = from_machine.recv()?;
         info!(
-            name,
             events = offsets.size(),
             deltas = out.len(),
             "received from machine"
@@ -106,21 +106,22 @@ enum TickStream<T> {
 /// This is only applicable if it is okay to lose events for the given use-case, for
 /// example it may be acceptable to lose the downstream effects of all operational
 /// metrics older than two weeks for the purpose of a live dashboard.
-pub async fn run_event_machine_on_channel<I, O, R, St: NeedsState>(
+pub async fn run_event_machine_on_channel<I, O, R, St: NeedsState, N>(
     mut machine: Machine<I, O, St>,
     subscriptions: Vec<Subscription>,
     mut offsets: OffsetMap,
     to_db: SyncSender<(OffsetMap, Vec<(R, isize)>)>,
-    name: String,
+    name: N,
     events_per_txn: usize,
 ) -> Result<()>
 where
     I: Inputs<Elem = Event<Payload>>,
     O: ExchangeData,
     R: From<O>,
+    N: Into<String>,
 {
-    let span = info_span!("event_machine", name = field::display(name));
-    let _ = span.enter();
+    let span1 = info_span!("event_machine", name = field::display(name.into()));
+    let _guard1 = span1.enter();
     info!("starting with subscriptions {:?}", subscriptions);
 
     // The plan here is:
@@ -276,8 +277,9 @@ where
     drop(enter);
     drop(span);
 
+    info!("switching to live events");
     let span = info_span!("live events");
-    let _ = span.enter();
+    let _guard = span.enter();
 
     let events = client
         .subscribe_from(present, subscriptions.to_vec())
