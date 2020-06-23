@@ -1,0 +1,9 @@
+manifestVersion: "1.0" # The version of the manifest
+type: "docker" # The type of app this is (web or docker)
+id: "com.actyx.data_flow.machine-dashboard" # A unique app id
+version: "1.0.0" # The version (semantic versioning)
+displayName: "Machine Dashboard" # A human-friendly display name
+description: "Demo project showing how to drive a dashboard with actyxos_data_flow" # A short description
+dockerCompose: 
+  x86_64: "./docker-compose.yml" # Path to the docker-compose file
+settingsSchema: {"default":{}} # this app takes no settings
