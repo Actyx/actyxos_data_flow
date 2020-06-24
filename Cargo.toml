@@ -10,6 +10,7 @@ homepage = "https://developer.actyx.com"
 license = "Apache-2.0"
 keywords = ["distributed", "decentralized", "event-sourcing"]
 categories = ["network-programming"]
+repository = "https://github.com/Actyx/actyxos_data_flow"
 
 [dependencies]
 abomonation = "0.7"
