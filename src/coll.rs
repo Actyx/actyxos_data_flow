@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+//! Utility for consolidating differential dataflow deltas
+
 use std::collections::btree_map::{self, Iter};
 use std::collections::BTreeMap;
 use std::ops::AddAssign;

@@ -11,7 +11,7 @@ pub enum MachineEvent {
     Stopped { order: String },
 }
 
-#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize, Abomonation)]
+#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Abomonation)]
 pub struct DashboardEntry {
     pub machine: String,
     pub status: MachineStatus,

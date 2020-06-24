@@ -38,6 +38,8 @@ The full project is in the `example` folder, the sample webapp that generates th
 underlying events can be found in the `webapp` folder. Both can be deployed to
 an ActyxOS node or run in developer mode, see the [quickstart guide](https://developer.actyx.com/docs/quickstart).
 
+See also the [blog post](http://developer.actyx.com/blog/2020/06/25/differential-dataflow) for more background information.
+
 ## Building the Docker app
 
 Build the binary and docker image on Linux with

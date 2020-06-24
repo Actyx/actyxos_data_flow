@@ -552,7 +552,7 @@ where
         self.reduce(|_, i, o| o.push((i[i.len() - 1].0.clone(), 1)))
     }
 
-    /// Compute the maximum element per key
+    /// Compute the maximum element per key, sorting by the result of applying the given function to each value
     pub fn max_by<T, F>(&self, f: F) -> Self
     where
         F: Fn(&V) -> T + 'static + Clone,

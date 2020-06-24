@@ -13,6 +13,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+//! Utility functions to tying the pieces together in a runnable fashion
+//!
+//! Please refer to the example in the repository to see a complete setup,
+//! as the full definition of input and output data formats takes more room.
+//! The main part works like this:
+//!
+//! ```ignore
+//! let mut db = SqliteDB::<Union<_>>::new("", "db_name")?;
+//! let subscriptions = vec![Subscription::wildcard(semantics!("machineFish"))];
+//!
+//! run_with_db_channel(
+//!     runtime.handle().clone(), // runtime to use for running async tasks
+//!     &mut db,                  // DB to store results in
+//!     "dashboard",              // name for logging
+//!     move |offsets, to_db| {
+//!         run_event_machine_on_channel(
+//!             Machine::new(&dashboard_logic),
+//!             subscriptions,     // which events we need
+//!             offsets,           // where we left off last time
+//!             to_db,             // sending channel towards DB
+//!             "dashboard_logic", // name for logging
+//!             1_000,             // events per transaction
+//!         )
+//!     },
+//! )
+//! ```
+
 use crate::{
     coll::Coll,
     db::{DbMechanics, DbRecordExt, DB},

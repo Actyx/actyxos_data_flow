@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+//! A wrapper for dataflow logic that knows how to feed inputs and get out deltas
 use anyhow::Result;
 use timely::communication::allocator::thread::Thread;
 use timely::dataflow::scopes::Child;

@@ -1,7 +1,6 @@
 use abomonation_derive::Abomonation;
 use actyxos_data_flow::db::{DbColumn, DbMechanics, DbRecord, SqliteDbMechanics};
 use actyxos_sdk::event::TimeStamp;
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize, Abomonation)]
@@ -11,7 +10,7 @@ pub enum MachineEvent {
     Stopped { order: String },
 }
 
-#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize, Abomonation)]
+#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Abomonation)]
 pub struct UsageEntry {
     pub machine: String,
     pub order: String,
@@ -59,12 +58,8 @@ impl DbRecord<SqliteDbMechanics> for UsageEntry {
         vec![
             Box::new(self.machine.clone()),
             Box::new(self.order.clone()),
-            Box::new(ts(self.started).timestamp()),
+            Box::new(self.started.as_i64() / 1_000_000),
             Box::new(self.duration_micros),
         ]
     }
-}
-
-fn ts(t: TimeStamp) -> DateTime<Utc> {
-    t.into()
 }

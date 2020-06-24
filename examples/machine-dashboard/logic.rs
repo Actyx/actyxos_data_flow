@@ -1,6 +1,7 @@
 use crate::model::{DashboardEntry, MachineEvent};
 use actyxos_data_flow::flow::{Flow, Input, Scope, Stateful};
 use actyxos_sdk::event::Event;
+use std::time::Duration;
 
 pub fn dashboard_logic<'a>(
     scope: &mut Scope<'a>,
@@ -8,7 +9,8 @@ pub fn dashboard_logic<'a>(
     Input<Event<MachineEvent>>,
     Flow<'a, DashboardEntry, Stateful>,
 ) {
-    let (injector, events) = Flow::<Event<MachineEvent>, _>::new(scope);
+    let one_year = Duration::from_secs(365 * 86400);
+    let (injector, events) = Flow::<Event<MachineEvent>, _>::new_limited(scope, one_year);
 
     let out = events
         .filter(|ev| ev.stream.name.as_str().starts_with("Drill"))
