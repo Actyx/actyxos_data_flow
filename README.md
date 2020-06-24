@@ -40,13 +40,10 @@ an ActyxOS node or run in developer mode, see the [quickstart guide](https://dev
 
 ## Building the Docker app
 
-Build the binary with
+Build the binary and docker image on Linux with
 
-    cargo build --release --examples
-
-then add it to your running docker daemon with
-
-    docker build . -t machine-dashboard
+    cd machine-dashboard-app
+    ./build.sh
 
 then package it into an ActyxOS app and deploy it with
 
@@ -62,3 +59,6 @@ library as well as connect to PostgreSQL or Microsoft SQL Server databases to st
 the transformation results.
 
 The DB driver code is also commented and allows extensions for other databases.
+
+If you want to build on Windows or for other architectures, you may take a look at the
+[Rust Docker image](https://hub.docker.com/_/rust).
