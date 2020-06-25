@@ -4,14 +4,12 @@ cd `dirname $0`
 
 FG='\033[0;35m'
 BG='\033[0m'
-pushd ..
+
 echo -e "${FG}building builder image${BG}"
-BUILDER_ID=`docker build -f Dockerfile.builder -q .`
-echo -e "${FG}built builder image ($BUILDER_ID)${BG}"
+BUILD_ID=`docker build -f Dockerfile.builder . | tee /dev/fd/2 | awk '/Successfully built/{print $3}'`
 
 echo -e "${FG}compiling with --release, this may take a while${BG}"
-docker run -v `pwd`:/src -u $(id -u ):$(id -g) -it $BUILDER_ID cargo build --release --examples
-popd
+docker run -v `pwd`/..:/src -u $(id -u):$(id -g) -it $BUILD_ID cargo build --release --examples
 
 echo -e "${FG}copying binary${BG}"
 mkdir -pv bin
